@@ -108,8 +108,63 @@ class BFSLevin():
      
 
     def get_levin_cost(self, node):
-        pass
+        if node.get_depth() == 0:
+            return 0
+        return math.log(node.get_depth()) - node.get_p()
 
     def search(self, initial_state, model, budget=-1):
-        pass
- 
+        open_list = []
+        closed = set()
+        expansions = 0
+
+        root = TreeNode(None, initial_state, 0, 0, -1)
+
+        probs = model.get_probabilities(initial_state.get_context())
+        root.set_probability_distribution_actions(np.log(probs))
+        root.set_levin_cost(self.get_levin_cost(root))
+
+        heapq.heappush(open_list, root)
+
+        while open_list:
+            node = heapq.heappop(open_list)
+
+            if node in closed:
+                continue
+
+            state = node.get_game_state()
+
+            if state.is_solution():
+                return self.get_levin_cost(node), expansions, self.recover_path(node)
+
+            if budget != -1 and expansions >= budget:
+                return -1, expansions, None
+
+            closed.add(node)
+            expansions += 1
+
+            actions = state.successors_parent_pruning(node.get_action())
+            prob_dist = node.get_probability_distribution_actions()
+
+            for a in actions:
+                child_state = copy.deepcopy(state)
+                child_state.apply_action(a)
+
+                if child_state in closed:
+                    continue
+
+                child_prob = node.get_p() + prob_dist[a]
+                child_depth = node.get_depth() + 1
+                child_node = TreeNode(node, child_state, child_prob, child_depth, a)
+
+                if child_state.is_solution():
+                    child_node.set_levin_cost(self.get_levin_cost(child_node))
+                    return self.get_levin_cost(child_node), expansions, self.recover_path(child_node)
+
+                child_probs = model.get_probabilities(child_state.get_context())
+                child_node.set_probability_distribution_actions(np.log(child_probs))
+                child_node.set_levin_cost(self.get_levin_cost(child_node))
+
+                heapq.heappush(open_list, child_node)
+
+        return -1, expansions, None
+
